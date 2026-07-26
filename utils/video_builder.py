@@ -7,7 +7,7 @@ from utils.captions import make_word_chunk_overlay, render_emoji_png, make_title
 
 # Landscape by default - matches the reference videos (1920x1080).
 # Switch to (1080, 1920) if you want vertical/reels-style output instead.
-WIDTH, HEIGHT = 1920, 1080
+WIDTH, HEIGHT = 1280, 720
 FPS = 30
 TRANSITION = 0.5   # seconds of crossfade between images
 WORDS_PER_CHUNK = 2

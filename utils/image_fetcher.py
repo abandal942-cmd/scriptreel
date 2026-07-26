@@ -84,7 +84,7 @@ def fetch_topic_images(sentences, out_dir, api_key=None, per_page=6, full_text=N
             chosen = next((p for p in photos if p["id"] not in used_photo_ids), photos[0])
             used_photo_ids.add(chosen["id"])
 
-            img_url = chosen["src"]["large2x"]
+            img_url = chosen["src"]["large"]
             img_resp = requests.get(img_url, timeout=20)
             img_resp.raise_for_status()
             path = os.path.join(out_dir, f"webimg_{i}.jpg")
