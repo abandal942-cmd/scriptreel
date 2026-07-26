@@ -86,28 +86,11 @@
     </div>
 
     <div class="mode-panel" data-panel="voicecount-1">
-      <div class="mode-toggle" data-group="voice">
-        <button class="mode-btn active" data-mode="default">System voice</button>
-        <button class="mode-btn" data-mode="library">My uploads</button>
-        <button class="mode-btn" data-mode="upload">Upload new</button>
-      </div>
-
-      <div class="mode-panel" data-panel="voice-default">
-        <select id="voiceSelect">
-          {% for v in default_voices %}
-          <option value="{{ v.id }}">{{ v.label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div class="mode-panel hidden" data-panel="voice-library">
-        <select id="voiceLibrarySelect"><option value="">Loading your voices…</option></select>
-      </div>
-
-      <div class="mode-panel hidden" data-panel="voice-upload">
-        <input type="file" id="voiceFileInput" accept="audio/*">
-        <p class="hint">Upload a clean 10–30s voice sample — your script will be spoken in this voice using AI voice cloning (not used as-is anymore).</p>
-      </div>
+      <select id="voiceSelect">
+        {% for v in default_voices %}
+        <option value="{{ v.id }}">{{ v.label }}</option>
+        {% endfor %}
+      </select>
     </div>
 
     <div class="mode-panel hidden" data-panel="voicecount-2">
@@ -115,40 +98,20 @@
 
       <div class="speaker-block">
         <div class="step-label" style="font-size:11px; margin-top:14px;">Teacher voice</div>
-        <div class="mode-toggle" data-group="teachervoice">
-          <button class="mode-btn active" data-mode="default">System voice</button>
-          <button class="mode-btn" data-mode="upload">Upload sample (clone)</button>
-        </div>
-        <div class="mode-panel" data-panel="teachervoice-default">
-          <select id="teacherVoiceSelect">
-            {% for v in default_voices %}
-            <option value="{{ v.id }}">{{ v.label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="mode-panel hidden" data-panel="teachervoice-upload">
-          <input type="file" id="teacherVoiceFileInput" accept="audio/*">
-          <p class="hint">10–30s clean sample — Teacher lines will be spoken in this voice.</p>
-        </div>
+        <select id="teacherVoiceSelect">
+          {% for v in default_voices %}
+          <option value="{{ v.id }}">{{ v.label }}</option>
+          {% endfor %}
+        </select>
       </div>
 
       <div class="speaker-block">
         <div class="step-label" style="font-size:11px; margin-top:14px;">Student voice</div>
-        <div class="mode-toggle" data-group="studentvoice">
-          <button class="mode-btn active" data-mode="default">System voice</button>
-          <button class="mode-btn" data-mode="upload">Upload sample (clone)</button>
-        </div>
-        <div class="mode-panel" data-panel="studentvoice-default">
-          <select id="studentVoiceSelect">
-            {% for v in default_voices %}
-            <option value="{{ v.id }}">{{ v.label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="mode-panel hidden" data-panel="studentvoice-upload">
-          <input type="file" id="studentVoiceFileInput" accept="audio/*">
-          <p class="hint">10–30s clean sample — Student lines will be spoken in this voice.</p>
-        </div>
+        <select id="studentVoiceSelect">
+          {% for v in default_voices %}
+          <option value="{{ v.id }}">{{ v.label }}</option>
+          {% endfor %}
+        </select>
       </div>
     </div>
   </section>
