@@ -83,25 +83,21 @@ def _make_image_segment(image_path: str, duration: float, animate: bool, out_pat
 
 def _make_split_image_segment(image_path, duration, panel_text, animate, side, out_path, tmp_dir):
     """
-    Build one segment as a split layout: the photo animates (gentle Ken
-    Burns) on one half of the frame, a bold static text panel sits on the
-    other half. `side` ('left'/'right') says which half the photo is on —
-    callers alternate this per image for a left/right/left/right rhythm.
+    Build one segment as a split layout: the photo sits on one half of the
+    frame, a bold static text panel sits on the other half. `side`
+    ('left'/'right') says which half the photo is on — callers alternate
+    this per image for a left/right/left/right rhythm.
+
+    Note: unlike the full-bleed segment builder, this never applies Ken
+    Burns zoompan even if animate=True — combined with the hstack of two
+    streams, zoompan here was memory-hungry enough to get OOM-killed on
+    smaller Render instances. A static crop keeps this stable everywhere.
     """
     half_w = WIDTH // 2
     panel_path = os.path.join(tmp_dir, f"panel_{os.path.basename(out_path)}.png")
     make_text_panel(panel_text, half_w, HEIGHT, panel_path)
 
-    if animate:
-        zoom_frames = int(duration * FPS)
-        img_vf = (
-            f"scale={half_w * 2}:{HEIGHT * 2}:force_original_aspect_ratio=increase:flags=lanczos,"
-            f"crop={half_w * 2}:{HEIGHT * 2},"
-            f"zoompan=z='min(zoom+0.0015,1.3)':d={zoom_frames}:"
-            f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={half_w}x{HEIGHT}:fps={FPS}"
-        )
-    else:
-        img_vf = f"scale={half_w}:{HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,crop={half_w}:{HEIGHT}"
+    img_vf = f"scale={half_w}:{HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,crop={half_w}:{HEIGHT}"
 
     if side == "left":
         filter_complex = f"[0:v]{img_vf},format=yuv420p[imgv];[1:v]format=yuv420p[txtv];[imgv][txtv]hstack=inputs=2[out]"
@@ -116,7 +112,7 @@ def _make_split_image_segment(image_path, duration, panel_text, animate, side, o
         "-map", "[out]",
         "-t", str(duration),
         "-r", str(FPS),
-        "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
+        "-c:v", "libx264", "-crf", "16", "-preset", "veryfast", "-threads", "1", "-threads", "1",
         "-pix_fmt", "yuv420p",
         out_path,
     ]
@@ -154,7 +150,7 @@ def _concat_with_crossfade(segments, durations, out_path, transition):
     filter_complex = ";".join(filter_parts)
     cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", filter_complex,
            "-map", prev_label, "-r", str(FPS),
-           "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
+           "-c:v", "libx264", "-crf", "16", "-preset", "veryfast", "-threads", "1",
            "-pix_fmt", "yuv420p", out_path]
     subprocess.run(cmd, check=True, capture_output=True)
     return transition_times
@@ -262,7 +258,7 @@ def add_emoji_decorations(video_in, emoji_list, video_duration, transition_times
         "ffmpeg", "-y", *inputs,
         "-filter_complex", filter_complex,
         "-map", prev_label, "-t", str(video_duration),
-        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
+        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "veryfast", "-threads", "1",
         "-pix_fmt", "yuv420p", out_path,
     ]
     subprocess.run(cmd, check=True, capture_output=True)
@@ -334,7 +330,7 @@ def apply_speaker_badges(video_in, speaker_timeline, video_duration, out_path, t
         "ffmpeg", "-y", *inputs,
         "-filter_complex", filter_complex,
         "-map", prev_label, "-t", str(video_duration),
-        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
+        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "veryfast", "-threads", "1",
         "-pix_fmt", "yuv420p", out_path,
     ]
     subprocess.run(cmd, check=True, capture_output=True)
@@ -417,7 +413,7 @@ def _burn_progressive_captions(video_in, chunks, out_path):
         filter_complex = ";".join(filter_parts)
         cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", filter_complex,
                "-map", prev_label, "-r", str(FPS),
-               "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
+               "-c:v", "libx264", "-crf", "16", "-preset", "veryfast", "-threads", "1",
                "-pix_fmt", "yuv420p", out_path]
         subprocess.run(cmd, check=True, capture_output=True)
 
@@ -463,7 +459,7 @@ def apply_speed_change(video_in, speed_factor, out_path):
         "ffmpeg", "-y", "-i", video_in,
         "-filter_complex", filter_complex,
         "-map", "[v]", "-map", "[a]",
-        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
+        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "veryfast", "-threads", "1",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
         out_path,
     ]
@@ -533,7 +529,7 @@ def build_video(image_paths, narration_path, music_path, animate, output_path,
             "ffmpeg", "-y",
             "-i", video_with_text, "-i", mixed_audio,
             "-map", "0:v", "-map", "1:a",
-            "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
+            "-c:v", "libx264", "-crf", "16", "-preset", "veryfast", "-threads", "1",
             "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k",
             "-shortest",
