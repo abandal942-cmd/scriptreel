@@ -74,7 +74,7 @@ def _make_image_segment(image_path: str, duration: float, animate: bool, out_pat
         "-r", str(FPS),
         "-c:v", "libx264",
         "-crf", "16",
-        "-preset", "slow",
+        "-preset", "veryfast",
         "-pix_fmt", "yuv420p",
         out_path,
     ]
@@ -116,7 +116,7 @@ def _make_split_image_segment(image_path, duration, panel_text, animate, side, o
         "-map", "[out]",
         "-t", str(duration),
         "-r", str(FPS),
-        "-c:v", "libx264", "-crf", "16", "-preset", "slow",
+        "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
         "-pix_fmt", "yuv420p",
         out_path,
     ]
@@ -154,7 +154,7 @@ def _concat_with_crossfade(segments, durations, out_path, transition):
     filter_complex = ";".join(filter_parts)
     cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", filter_complex,
            "-map", prev_label, "-r", str(FPS),
-           "-c:v", "libx264", "-crf", "16", "-preset", "slow",
+           "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
            "-pix_fmt", "yuv420p", out_path]
     subprocess.run(cmd, check=True, capture_output=True)
     return transition_times
@@ -262,7 +262,7 @@ def add_emoji_decorations(video_in, emoji_list, video_duration, transition_times
         "ffmpeg", "-y", *inputs,
         "-filter_complex", filter_complex,
         "-map", prev_label, "-t", str(video_duration),
-        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "slow",
+        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
         "-pix_fmt", "yuv420p", out_path,
     ]
     subprocess.run(cmd, check=True, capture_output=True)
@@ -334,7 +334,7 @@ def apply_speaker_badges(video_in, speaker_timeline, video_duration, out_path, t
         "ffmpeg", "-y", *inputs,
         "-filter_complex", filter_complex,
         "-map", prev_label, "-t", str(video_duration),
-        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "slow",
+        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
         "-pix_fmt", "yuv420p", out_path,
     ]
     subprocess.run(cmd, check=True, capture_output=True)
@@ -417,7 +417,7 @@ def _burn_progressive_captions(video_in, chunks, out_path):
         filter_complex = ";".join(filter_parts)
         cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", filter_complex,
                "-map", prev_label, "-r", str(FPS),
-               "-c:v", "libx264", "-crf", "16", "-preset", "slow",
+               "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
                "-pix_fmt", "yuv420p", out_path]
         subprocess.run(cmd, check=True, capture_output=True)
 
@@ -463,7 +463,7 @@ def apply_speed_change(video_in, speed_factor, out_path):
         "ffmpeg", "-y", "-i", video_in,
         "-filter_complex", filter_complex,
         "-map", "[v]", "-map", "[a]",
-        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "slow",
+        "-r", str(FPS), "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
         out_path,
     ]
@@ -533,7 +533,7 @@ def build_video(image_paths, narration_path, music_path, animate, output_path,
             "ffmpeg", "-y",
             "-i", video_with_text, "-i", mixed_audio,
             "-map", "0:v", "-map", "1:a",
-            "-c:v", "libx264", "-crf", "16", "-preset", "slow",
+            "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
             "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k",
             "-shortest",
