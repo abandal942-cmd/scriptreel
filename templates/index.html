@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScriptReel — turn your script into video</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">Script<span>Reel</span></div>
+  <div class="sidebar-tagline">script in. reel out.</div>
+  <div class="sidebar-nav">
+    <a href="#sec-title" class="sidebar-link"><span class="sidebar-num">00</span> Title &amp; Topic</a>
+    <a href="#sec-speed" class="sidebar-link"><span class="sidebar-num">00b</span> Speed</a>
+    <a href="#sec-text" class="sidebar-link"><span class="sidebar-num">01</span> Script</a>
+    <a href="#sec-voice" class="sidebar-link"><span class="sidebar-num">02</span> Voice</a>
+    <a href="#sec-images" class="sidebar-link"><span class="sidebar-num">03</span> Images</a>
+    <a href="#sec-motion" class="sidebar-link"><span class="sidebar-num">04</span> Motion &amp; Music</a>
+    <a href="#resultCard" class="sidebar-link"><span class="sidebar-num">05</span> Result</a>
+    <a href="#timelineEditorCard" class="sidebar-link"><span class="sidebar-num">06</span> Timeline Editor</a>
+  </div>
+</nav>
+
+<div class="main-content">
+
+<header class="topbar">
+  <div class="brand">Script<span>Reel</span></div>
+  <div class="tagline">script in. reel out.</div>
+</header>
+
+<main class="wrap">
+
+  <!-- STEP 0 : TITLE / TOPIC -->
+  <section class="card" id="sec-title">
+    <div class="step-label">00 — Title / Topic</div>
+    <input type="text" id="videoTitleInput" placeholder="e.g. Python Programming Basics, or Nervous About Speaking English">
+    <p class="hint">Optional — tells us the topic directly, so emoji and auto-fetched images match better (instead of guessing from your script).</p>
+  </section>
+
+  <!-- STEP 0b : SPEED -->
+  <section class="card" id="sec-speed">
+    <div class="step-label">00b — Playback speed</div>
+    <select id="speedSelect">
+      <option value="0.75">0.75x (slower)</option>
+      <option value="1" selected>1x (normal)</option>
+      <option value="1.25">1.25x (faster)</option>
+      <option value="1.5">1.5x (faster)</option>
+      <option value="2">2x (fastest)</option>
+    </select>
+    <p class="hint">Speeds up or slows down the whole finished video (voice + captions together) — sync is preserved at any speed.</p>
+  </section>
+
+  <!-- STEP 1 : TEXT -->
+  <section class="card" id="sec-text">
+    <div class="step-label">01 — Text</div>
+    <div class="mode-toggle" data-group="textmode">
+      <button class="mode-btn active" data-mode="combined">Combined (same text spoken &amp; shown — best sync)</button>
+      <button class="mode-btn" data-mode="separate">Separate (advanced — different caption &amp; script)</button>
+    </div>
+
+    <div class="mode-panel" data-panel="textmode-combined">
+      <textarea id="combinedTextInput" placeholder="Type your script here — it will be spoken AND shown on screen, word-for-word in sync. For 2-voice dialogue mode, format lines like:&#10;Teacher: Welcome to today's lesson.&#10;Student: What are we learning?"></textarea>
+      <p class="hint">Required — recommended for most videos, guarantees captions match the voiceover exactly.</p>
+    </div>
+
+    <div class="mode-panel hidden" data-panel="textmode-separate">
+      <div class="step-label" style="font-size:11px;">On-screen text</div>
+      <textarea id="captionInput" placeholder="This text is shown as captions burned onto the video. Leave blank to reuse the narration script below."></textarea>
+      <p class="hint">Optional — if left empty, the narration script is shown on screen instead.</p>
+
+      <div class="step-label" style="font-size:11px; margin-top:14px;">Narration script</div>
+      <textarea id="scriptInput" placeholder="Type or paste the script that should be spoken (converted to audio)... For 2-voice dialogue mode, format lines like:&#10;Teacher: Welcome to today's lesson.&#10;Student: What are we learning?"></textarea>
+      <p class="hint">Required — this is what gets converted into the spoken voiceover. Using different wording than the on-screen text may cause captions to fall slightly out of sync.</p>
+    </div>
+  </section>
+
+  <!-- STEP 2 : VOICE -->
+  <section class="card" id="sec-voice">
+    <div class="step-label">02 — Voice</div>
+
+    <div class="mode-toggle" data-group="voicecount">
+      <button class="mode-btn active" data-mode="1">Single voice</button>
+      <button class="mode-btn" data-mode="2">2 voices (Teacher &amp; Student)</button>
+    </div>
+
+    <div class="mode-panel" data-panel="voicecount-1">
+      <div class="mode-toggle" data-group="voice">
+        <button class="mode-btn active" data-mode="default">System voice</button>
+        <button class="mode-btn" data-mode="library">My uploads</button>
+        <button class="mode-btn" data-mode="upload">Upload new</button>
+      </div>
+
+      <div class="mode-panel" data-panel="voice-default">
+        <select id="voiceSelect">
+          {% for v in default_voices %}
+          <option value="{{ v.id }}">{{ v.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mode-panel hidden" data-panel="voice-library">
+        <select id="voiceLibrarySelect"><option value="">Loading your voices…</option></select>
+      </div>
+
+      <div class="mode-panel hidden" data-panel="voice-upload">
+        <input type="file" id="voiceFileInput" accept="audio/*">
+        <p class="hint">Upload a clean 10–30s voice sample — your script will be spoken in this voice using AI voice cloning (not used as-is anymore).</p>
+      </div>
+    </div>
+
+    <div class="mode-panel hidden" data-panel="voicecount-2">
+      <p class="hint">Script must use <strong>Teacher:</strong> / <strong>Student:</strong> at the start of each line — see the placeholder text above.</p>
+
+      <div class="speaker-block">
+        <div class="step-label" style="font-size:11px; margin-top:14px;">Teacher voice</div>
+        <div class="mode-toggle" data-group="teachervoice">
+          <button class="mode-btn active" data-mode="default">System voice</button>
+          <button class="mode-btn" data-mode="upload">Upload sample (clone)</button>
+        </div>
+        <div class="mode-panel" data-panel="teachervoice-default">
+          <select id="teacherVoiceSelect">
+            {% for v in default_voices %}
+            <option value="{{ v.id }}">{{ v.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mode-panel hidden" data-panel="teachervoice-upload">
+          <input type="file" id="teacherVoiceFileInput" accept="audio/*">
+          <p class="hint">10–30s clean sample — Teacher lines will be spoken in this voice.</p>
+        </div>
+      </div>
+
+      <div class="speaker-block">
+        <div class="step-label" style="font-size:11px; margin-top:14px;">Student voice</div>
+        <div class="mode-toggle" data-group="studentvoice">
+          <button class="mode-btn active" data-mode="default">System voice</button>
+          <button class="mode-btn" data-mode="upload">Upload sample (clone)</button>
+        </div>
+        <div class="mode-panel" data-panel="studentvoice-default">
+          <select id="studentVoiceSelect">
+            {% for v in default_voices %}
+            <option value="{{ v.id }}">{{ v.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mode-panel hidden" data-panel="studentvoice-upload">
+          <input type="file" id="studentVoiceFileInput" accept="audio/*">
+          <p class="hint">10–30s clean sample — Student lines will be spoken in this voice.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3 : IMAGES -->
+  <section class="card" id="sec-images">
+    <div class="step-label">03 — Images</div>
+    <div class="mode-toggle" data-group="image">
+      <button class="mode-btn active" data-mode="default">Stock images</button>
+      <button class="mode-btn" data-mode="library">My uploads</button>
+      <button class="mode-btn" data-mode="upload">Upload new</button>
+      <button class="mode-btn" data-mode="webfetch">Auto photos (from web)</button>
+      <button class="mode-btn" data-mode="textcard">Text cards (no photos)</button>
+    </div>
+
+    <div class="mode-panel" data-panel="image-default">
+      <div id="defaultImageGrid" class="asset-grid"></div>
+    </div>
+
+    <div class="mode-panel hidden" data-panel="image-library">
+      <div id="libraryImageGrid" class="asset-grid"><p class="hint">Loading your images…</p></div>
+    </div>
+
+    <div class="mode-panel hidden" data-panel="image-upload">
+      <input type="file" id="imageFileInput" accept="image/*" multiple>
+      <p class="hint">Select one or more images, in the order they should appear.</p>
+    </div>
+
+    <div class="mode-panel hidden" data-panel="image-webfetch">
+      <p class="hint">No photos needed — we automatically find a matching real photo for each sentence of your on-screen text using stock photo search.</p>
+    </div>
+
+    <div class="mode-panel hidden" data-panel="image-textcard">
+      <p class="hint">No photos needed — each sentence of your on-screen text becomes a bold typographic slide (cream background, big centered statement), like a text-driven reel.</p>
+    </div>
+  </section>
+
+  <!-- STEP 4 : ANIMATION + MUSIC -->
+  <section class="card" id="sec-motion">
+    <div class="step-label">04 — Motion &amp; music</div>
+
+    <label class="switch-row">
+      <input type="checkbox" id="animateToggle">
+      <span>Animate images (Ken Burns pan &amp; zoom)</span>
+    </label>
+
+    <select id="musicSelect">
+      <option value="none">No background music</option>
+      {% for m in music_files %}
+      <option value="{{ m }}">{{ m }}</option>
+      {% endfor %}
+    </select>
+
+    <input type="text" id="topicEmojisInput" placeholder="🐍💻🚀 (optional — leave blank to auto-detect from your script)" style="margin-top:12px;">
+    <p class="hint">These float around the video and pop at transitions. Leave blank and we'll pick emoji based on your script's topic automatically.</p>
+  </section>
+
+  <button id="generateBtn" class="generate-btn">Generate video</button>
+
+  <section class="card hidden" id="resultCard">
+    <div class="step-label">Result</div>
+    <video id="resultVideo" controls></video>
+    <a id="downloadLink" class="download-link" download>Download video</a>
+  </section>
+
+  <section class="card hidden" id="timelineEditorCard">
+    <div class="step-label">Timeline Editor</div>
+    <p class="hint">Click "+" on any item in Add Media to insert it (or drag it onto the track). Edit seconds on a clip to resize it. Then hit Regenerate.</p>
+    <div class="editor-layout">
+      <div class="timeline-area">
+        <div id="timelineRuler" class="timeline-ruler"></div>
+        <div id="timelineTrack" class="timeline-track"></div>
+      </div>
+      <div class="media-panel">
+        <div class="step-label" style="font-size:11px;">Add Media</div>
+        <input type="file" id="mediaUploadInput" accept="image/*" multiple>
+        <p class="hint">Click + or drag a thumbnail onto the track.</p>
+        <div id="mediaPanelGrid" class="media-grid"></div>
+      </div>
+    </div>
+    <button id="regenerateBtn" class="generate-btn" style="margin-top:16px;">Regenerate video</button>
+  </section>
+
+</main>
+
+</div>
+
+<div id="loadingOverlay" class="loading-overlay hidden">
+  <div class="spinner"></div>
+  <p id="loadingText">Rendering your video…</p>
+</div>
+
+<script>
+  window.DEFAULT_IMAGE_FILES = {{ default_images | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
