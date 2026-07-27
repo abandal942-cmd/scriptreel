@@ -123,7 +123,6 @@ document.getElementById("generateBtn").addEventListener("click", async () => {
   formData.append("caption_text", caption); // may be blank -> backend falls back to script
   formData.append("animate", document.getElementById("animateToggle").checked);
   formData.append("music_choice", document.getElementById("musicSelect").value);
-  formData.append("topic_emojis", document.getElementById("topicEmojisInput").value.trim());
 
   // Voice
   formData.append("voice_count", state.voicecountMode);
@@ -221,6 +220,7 @@ async function initTimelineEditor(jobId) {
     ref: s.index,
     duration: s.duration,
     thumbUrl: s.thumb_url,
+    text: s.text, // null unless this slide is a text-card with editable wording
   }));
 
   document.getElementById("timelineEditorCard").classList.remove("hidden");
@@ -270,7 +270,8 @@ function renderTimeline() {
   timelineState.segments.forEach((seg, i) => {
     const clip = document.createElement("div");
     clip.className = "timeline-clip";
-    clip.style.width = `${Math.max(seg.duration * PX_PER_SEC, 50)}px`;
+    const baseWidth = Math.max(seg.duration * PX_PER_SEC, 50);
+    clip.style.width = `${seg.text != null ? Math.max(baseWidth, 170) : baseWidth}px`;
     clip.style.backgroundImage = `url(${seg.thumbUrl})`;
     clip.innerHTML = `
       <button class="seg-remove" title="Remove">✕</button>
@@ -278,11 +279,17 @@ function renderTimeline() {
         <button class="clip-move-btn" data-dir="-1" title="Move left">‹</button>
         <button class="clip-move-btn" data-dir="1" title="Move right">›</button>
       </div>
+      ${seg.text != null ? `<textarea class="clip-text-edit" placeholder="On-screen text for this slide…">${seg.text}</textarea>` : ""}
       <div class="clip-overlay">
         <input type="number" min="0.5" step="0.5" value="${seg.duration.toFixed(1)}">
         <span>sec</span>
       </div>
     `;
+    if (seg.text != null) {
+      clip.querySelector(".clip-text-edit").addEventListener("change", (e) => {
+        seg.text = e.target.value;
+      });
+    }
     clip.querySelector("input").addEventListener("change", (e) => {
       const val = parseFloat(e.target.value);
       seg.duration = isNaN(val) || val < 0.5 ? 0.5 : val;
@@ -390,6 +397,7 @@ document.getElementById("regenerateBtn").addEventListener("click", async () => {
       index: s.kind === "job" ? s.ref : undefined,
       id: s.kind === "asset" ? s.ref : undefined,
       duration: s.duration,
+      text: s.text != null ? s.text : undefined,
     })),
   };
   document.getElementById("loadingText").textContent = "Regenerating your video…";
@@ -405,15 +413,25 @@ document.getElementById("regenerateBtn").addEventListener("click", async () => {
       alert("Error: " + data.error);
       return;
     }
-    const video = document.getElementById("resultVideo");
-    document.getElementById("resultCard").classList.remove("hidden");
+    const video = document.getElementById("timelineResultVideo");
+    document.getElementById("timelineResultBox").classList.remove("hidden");
     video.pause();
     video.removeAttribute("src");
     video.load();
     video.src = data.video_url;
     video.load();
+    document.getElementById("timelineDownloadLink").href = data.video_url;
+
+    // keep the main Result section in sync too
+    const mainVideo = document.getElementById("resultVideo");
+    mainVideo.pause();
+    mainVideo.removeAttribute("src");
+    mainVideo.load();
+    mainVideo.src = data.video_url;
+    mainVideo.load();
     document.getElementById("downloadLink").href = data.video_url;
-    document.getElementById("resultCard").scrollIntoView({ behavior: "smooth" });
+
+    document.getElementById("timelineResultBox").scrollIntoView({ behavior: "smooth" });
   } catch (err) {
     alert("Something went wrong regenerating the video.");
     console.error(err);

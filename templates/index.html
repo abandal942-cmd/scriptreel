@@ -165,8 +165,6 @@
       {% endfor %}
     </select>
 
-    <input type="text" id="topicEmojisInput" placeholder="🐍💻🚀 (optional — leave blank to auto-detect from your script)" style="margin-top:12px;">
-    <p class="hint">These float around the video and pop at transitions. Leave blank and we'll pick emoji based on your script's topic automatically.</p>
   </section>
 
   <button id="generateBtn" class="generate-btn">Generate video</button>
@@ -193,6 +191,12 @@
       </div>
     </div>
     <button id="regenerateBtn" class="generate-btn" style="margin-top:16px;">Regenerate video</button>
+
+    <div id="timelineResultBox" class="hidden" style="margin-top:20px;">
+      <div class="step-label" style="font-size:11px;">Updated video</div>
+      <video id="timelineResultVideo" controls></video>
+      <a id="timelineDownloadLink" class="download-link" download>Download video</a>
+    </div>
   </section>
 
 </main>

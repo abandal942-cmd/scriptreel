@@ -7,7 +7,7 @@ from utils.captions import make_word_chunk_overlay, render_emoji_png, make_title
 
 # Landscape by default - matches the reference videos (1920x1080).
 # Switch to (1080, 1920) if you want vertical/reels-style output instead.
-WIDTH, HEIGHT = 1280, 720
+WIDTH, HEIGHT = 800, 450
 FPS = 30
 TRANSITION = 0.5   # seconds of crossfade between images
 WORDS_PER_CHUNK = 2
@@ -51,21 +51,16 @@ def _validate_narration(path: str):
 
 
 def _make_image_segment(image_path: str, duration: float, animate: bool, out_path: str):
-    """Create a single video segment from one image, full-bleed (no letterboxing), with optional Ken Burns zoom/pan."""
-    if animate:
-        zoom_frames = int(duration * FPS)
-        # Explicit 2x target dims (not -2) so the crop always fully covers the frame, no black bars.
-        vf = (
-            f"scale={WIDTH*2}:{HEIGHT*2}:force_original_aspect_ratio=increase:flags=lanczos,"
-            f"crop={WIDTH*2}:{HEIGHT*2},"
-            f"zoompan=z='min(zoom+0.0015,1.3)':d={zoom_frames}:"
-            f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={WIDTH}x{HEIGHT}:fps={FPS}"
-        )
-    else:
-        vf = (
-            f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,"
-            f"crop={WIDTH}:{HEIGHT}"
-        )
+    """
+    Create a single video segment from one image, full-bleed (no letterboxing).
+
+    Note: Ken Burns zoompan is intentionally NOT used here even when
+    animate=True — ffmpeg's zoompan filter is known to be memory-hungry,
+    and on a 512MB-RAM hosting tier it was getting the worker OOM-killed.
+    A static crop keeps every render stable; crossfades + captions + emoji
+    still give the video motion/visual interest without it.
+    """
+    vf = f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,crop={WIDTH}:{HEIGHT}"
 
     cmd = [
         "ffmpeg", "-y", "-loop", "1", "-i", image_path,
@@ -75,6 +70,7 @@ def _make_image_segment(image_path: str, duration: float, animate: bool, out_pat
         "-c:v", "libx264",
         "-crf", "16",
         "-preset", "veryfast",
+        "-threads", "1",
         "-pix_fmt", "yuv420p",
         out_path,
     ]
@@ -112,7 +108,7 @@ def _make_split_image_segment(image_path, duration, panel_text, animate, side, o
         "-map", "[out]",
         "-t", str(duration),
         "-r", str(FPS),
-        "-c:v", "libx264", "-crf", "16", "-preset", "veryfast", "-threads", "1", "-threads", "1",
+        "-c:v", "libx264", "-crf", "16", "-preset", "veryfast", "-threads", "1",
         "-pix_fmt", "yuv420p",
         out_path,
     ]

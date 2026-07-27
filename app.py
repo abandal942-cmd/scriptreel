@@ -9,8 +9,8 @@ from flask import Flask, request, jsonify, render_template, session, send_from_d
 
 from utils.db import init_db, get_db
 from utils.tts_utils import DEFAULT_VOICES, generate_tts, clone_tts
-from utils.video_builder import build_video, concat_audio_segments, generate_text_card_images, get_audio_duration
-from utils.emoji_picker import pick_emojis
+from utils.video_builder import build_video, concat_audio_segments, generate_text_card_images, get_audio_duration, WIDTH, HEIGHT
+from utils.captions import make_title_card
 from utils.image_fetcher import fetch_topic_images
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -329,11 +329,13 @@ def generate():
 
     # --- Resolve images ---
     image_paths = []
+    text_sources = None
     if image_mode == "textcard":
         sentences = split_into_scenes(caption_text)
         if not sentences:
             sentences = [caption_text]
         image_paths = generate_text_card_images(sentences, job_dir)
+        text_sources = sentences
     elif image_mode == "webfetch":
         sentences = split_into_scenes(caption_text)
         if not sentences:
@@ -379,11 +381,6 @@ def generate():
     if music_choice and music_choice != "none":
         music_path = os.path.join(DEFAULT_MUSIC_DIR, music_choice)
 
-    # --- Pick topic emoji for decoration (manual input takes priority, else auto from script) ---
-    manual_emojis = request.form.get("topic_emojis", "").strip()
-    emoji_source_text = f"{video_title} {script_text}".strip() if video_title else script_text
-    emoji_list = pick_emojis(emoji_source_text, manual_emojis=manual_emojis)
-
     # --- Build the final video ---
     output_path = os.path.join(job_dir, "final_video.mp4")
     try:
@@ -395,7 +392,7 @@ def generate():
             output_path=output_path,
             caption_text=caption_text,
             word_boundaries=word_boundaries,
-            emoji_list=emoji_list,
+            emoji_list=None,
             speaker_timeline=speaker_timeline,
             panel_texts=panel_texts,
             speed_factor=speed_factor,
@@ -415,11 +412,12 @@ def generate():
         "animate": animate,
         "caption_text": caption_text,
         "word_boundaries": word_boundaries,
-        "emoji_list": emoji_list,
+        "emoji_list": None,
         "speaker_timeline": speaker_timeline,
         "panel_texts": panel_texts,
         "speed_factor": speed_factor,
         "durations": [default_seg_duration] * len(image_paths),
+        "text_sources": text_sources,
     }
     with open(os.path.join(job_dir, "meta.json"), "w") as f:
         json.dump(meta, f)
@@ -442,8 +440,14 @@ def job_timeline(job_id):
     meta, job_dir = _load_job_meta(job_id)
     if meta is None:
         return jsonify({"error": "job not found"}), 404
+    text_sources = meta.get("text_sources")
     segments = [
-        {"index": i, "duration": meta["durations"][i], "thumb_url": f"/jobs/{job_id}/thumb/{i}"}
+        {
+            "index": i,
+            "duration": meta["durations"][i],
+            "thumb_url": f"/jobs/{job_id}/thumb/{i}",
+            "text": text_sources[i] if text_sources and i < len(text_sources) else None,
+        }
         for i in range(len(meta["image_paths"]))
     ]
     return jsonify({"segments": segments})
@@ -479,14 +483,27 @@ def job_regenerate(job_id):
 
     new_image_paths = []
     new_durations = []
+    new_text_sources = []
+    old_text_sources = meta.get("text_sources")
     for seg in segments:
         kind = seg.get("kind")
         duration = float(seg.get("duration", 3.0))
         duration = max(duration, 0.5)
+        edited_text = seg.get("text")
+        text_for_slide = None
         try:
             if kind == "job":
                 idx = int(seg["index"])
                 path = meta["image_paths"][idx]
+                original_text = old_text_sources[idx] if old_text_sources and idx < len(old_text_sources) else None
+                if edited_text is not None and original_text is not None and edited_text.strip() and edited_text != original_text:
+                    # Re-render this slide's text-card image with the new wording
+                    new_card_path = os.path.join(job_dir, f"card_edit_{uuid.uuid4().hex[:8]}.png")
+                    make_title_card(edited_text.strip(), WIDTH, HEIGHT, new_card_path)
+                    path = new_card_path
+                    text_for_slide = edited_text.strip()
+                else:
+                    text_for_slide = original_text
             elif kind == "asset":
                 path = resolve_asset_path(user_id, "image", "library", seg["id"], None)
             elif kind == "default":
@@ -498,6 +515,7 @@ def job_regenerate(job_id):
         if os.path.isfile(path):
             new_image_paths.append(path)
             new_durations.append(duration)
+            new_text_sources.append(text_for_slide)
 
     if not new_image_paths:
         return jsonify({"error": "no valid images found in the submitted timeline"}), 400
@@ -512,7 +530,7 @@ def job_regenerate(job_id):
             output_path=output_path,
             caption_text=meta["caption_text"],
             word_boundaries=meta["word_boundaries"],
-            emoji_list=meta["emoji_list"],
+            emoji_list=None,
             speaker_timeline=meta["speaker_timeline"],
             panel_texts=meta["panel_texts"],
             speed_factor=meta["speed_factor"],
@@ -526,6 +544,7 @@ def job_regenerate(job_id):
     # Persist the edited timeline so further tweaks build on top of this version
     meta["image_paths"] = new_image_paths
     meta["durations"] = new_durations
+    meta["text_sources"] = new_text_sources if any(t is not None for t in new_text_sources) else None
     with open(os.path.join(job_dir, "meta.json"), "w") as f:
         json.dump(meta, f)
 
