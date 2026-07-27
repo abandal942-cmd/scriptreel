@@ -333,19 +333,35 @@ def apply_speaker_badges(video_in, speaker_timeline, video_duration, out_path, t
 
 
 def _mix_audio(narration_path, music_path, duration, out_path):
+    """
+    Produce the final audio track at exactly `duration` seconds — padding
+    with silence at the end if the narration is shorter (e.g. the user
+    extended a timeline clip past the spoken audio), or trimming if it's
+    longer. Without the apad step here, a video timeline longer than the
+    narration would get silently cut back down to narration length by
+    -shortest at the final mux, making timeline duration edits appear to
+    have no effect.
+    """
     if music_path and os.path.isfile(music_path):
         cmd = [
             "ffmpeg", "-y",
             "-i", narration_path,
             "-stream_loop", "-1", "-i", music_path,
             "-filter_complex",
-            "[1:a]volume=0.18[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+            "[1:a]volume=0.18[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[mixed];"
+            "[mixed]apad[aout]",
             "-map", "[aout]",
             "-t", str(duration),
             out_path,
         ]
     else:
-        cmd = ["ffmpeg", "-y", "-i", narration_path, "-t", str(duration), out_path]
+        cmd = [
+            "ffmpeg", "-y", "-i", narration_path,
+            "-filter_complex", "[0:a]apad[aout]",
+            "-map", "[aout]",
+            "-t", str(duration),
+            out_path,
+        ]
     subprocess.run(cmd, check=True, capture_output=True)
 
 
@@ -517,8 +533,10 @@ def build_video(image_paths, narration_path, music_path, animate, output_path,
             _burn_progressive_captions(video_with_emoji, chunks, captioned_video)
             video_with_text = captioned_video
 
+        total_video_duration = sum(base_durations)
+
         mixed_audio = os.path.join(tmp, "mixed.aac")
-        _mix_audio(narration_path, music_path, narration_duration, mixed_audio)
+        _mix_audio(narration_path, music_path, total_video_duration, mixed_audio)
 
         muxed_path = os.path.join(tmp, "muxed.mp4") if speed_factor != 1.0 else output_path
         cmd = [
