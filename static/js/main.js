@@ -207,6 +207,7 @@ const PX_PER_SEC = 40;
 const timelineState = {
   jobId: null,
   segments: [], // { kind: 'job'|'asset', ref: index|id, duration, thumbUrl }
+  replaceTargetIndex: null,
 };
 
 async function initTimelineEditor(jobId) {
@@ -246,12 +247,33 @@ function moveSegment(i, direction) {
   renderTimeline();
 }
 
+function replaceSegment(index, newMedia) {
+  const seg = timelineState.segments[index];
+  if (!seg) return;
+  seg.kind = newMedia.kind;
+  seg.ref = newMedia.id;
+  seg.thumbUrl = newMedia.thumbUrl;
+  // A replaced image is a real photo now, not a text-card slide, so it no
+  // longer has editable on-screen text tied to it.
+  seg.text = null;
+  timelineState.replaceTargetIndex = null;
+  renderTimeline();
+}
+
 function renderTimeline() {
   const track = document.getElementById("timelineTrack");
   const ruler = document.getElementById("timelineRuler");
   track.innerHTML = "";
   ruler.innerHTML = "";
   track.classList.toggle("empty", timelineState.segments.length === 0);
+
+  const replaceHint = document.getElementById("replaceModeHint");
+  if (timelineState.replaceTargetIndex !== null) {
+    replaceHint.textContent = `Replace mode: click + on an image below to swap slide ${timelineState.replaceTargetIndex + 1}. Click ⇄ again to cancel.`;
+    replaceHint.classList.remove("hidden");
+  } else {
+    replaceHint.classList.add("hidden");
+  }
 
   const totalDuration = timelineState.segments.reduce((sum, s) => sum + s.duration, 0);
   const totalWidth = Math.max(totalDuration * PX_PER_SEC, 320);
@@ -269,7 +291,7 @@ function renderTimeline() {
 
   timelineState.segments.forEach((seg, i) => {
     const clip = document.createElement("div");
-    clip.className = "timeline-clip";
+    clip.className = "timeline-clip" + (timelineState.replaceTargetIndex === i ? " armed-for-replace" : "");
     const baseWidth = Math.max(seg.duration * PX_PER_SEC, 50);
     clip.style.width = `${seg.text != null ? Math.max(baseWidth, 170) : baseWidth}px`;
     clip.style.backgroundImage = `url(${seg.thumbUrl})`;
@@ -278,6 +300,7 @@ function renderTimeline() {
       <div class="clip-move">
         <button class="clip-move-btn" data-dir="-1" title="Move left">‹</button>
         <button class="clip-move-btn" data-dir="1" title="Move right">›</button>
+        <button class="clip-replace-btn" title="Replace this slide's image">⇄</button>
       </div>
       ${seg.text != null ? `<textarea class="clip-text-edit" placeholder="On-screen text for this slide…">${seg.text}</textarea>` : ""}
       <div class="clip-overlay">
@@ -285,6 +308,10 @@ function renderTimeline() {
         <span>sec</span>
       </div>
     `;
+    clip.querySelector(".clip-replace-btn").addEventListener("click", () => {
+      timelineState.replaceTargetIndex = timelineState.replaceTargetIndex === i ? null : i;
+      renderTimeline();
+    });
     if (seg.text != null) {
       clip.querySelector(".clip-text-edit").addEventListener("change", (e) => {
         seg.text = e.target.value;
@@ -319,7 +346,11 @@ function renderTimeline() {
       if (!raw) return;
       try {
         const dropped = JSON.parse(raw);
-        addSegmentToTimeline({ kind: dropped.kind, ref: dropped.id, duration: 3.0, thumbUrl: dropped.thumbUrl }, i);
+        if (timelineState.replaceTargetIndex === i) {
+          replaceSegment(i, dropped);
+        } else {
+          addSegmentToTimeline({ kind: dropped.kind, ref: dropped.id, duration: 3.0, thumbUrl: dropped.thumbUrl }, i);
+        }
       } catch (err) {
         console.error("drop parse failed", err);
       }
@@ -345,7 +376,11 @@ async function loadMediaPanel() {
       e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "asset", id: item.id, thumbUrl }));
     });
     wrap.querySelector(".media-add-btn").addEventListener("click", () => {
-      addSegmentToTimeline({ kind: "asset", ref: item.id, duration: 3.0, thumbUrl });
+      if (timelineState.replaceTargetIndex !== null) {
+        replaceSegment(timelineState.replaceTargetIndex, { kind: "asset", id: item.id, thumbUrl });
+      } else {
+        addSegmentToTimeline({ kind: "asset", ref: item.id, duration: 3.0, thumbUrl });
+      }
     });
     grid.appendChild(wrap);
   });
