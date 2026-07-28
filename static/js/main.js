@@ -466,6 +466,12 @@ document.getElementById("regenerateBtn").addEventListener("click", async () => {
     mainVideo.load();
     document.getElementById("downloadLink").href = data.video_url;
 
+    // Re-sync the timeline with the server's new state (indices/order may
+    // have shifted after rebuilding) so the NEXT edit + regenerate works
+    // off correct references instead of stale ones.
+    await initTimelineEditor(timelineState.jobId);
+
+    document.getElementById("timelineResultBox").classList.remove("hidden");
     document.getElementById("timelineResultBox").scrollIntoView({ behavior: "smooth" });
   } catch (err) {
     alert("Something went wrong regenerating the video.");
