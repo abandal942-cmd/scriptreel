@@ -480,6 +480,7 @@ def job_regenerate(job_id):
     segments = payload.get("segments", [])
     if not segments:
         return jsonify({"error": "at least one timeline segment is required"}), 400
+    print(f"[regenerate] job={job_id} received segments: {segments}", flush=True)
 
     new_image_paths = []
     new_durations = []
@@ -519,6 +520,7 @@ def job_regenerate(job_id):
 
     if not new_image_paths:
         return jsonify({"error": "no valid images found in the submitted timeline"}), 400
+    print(f"[regenerate] job={job_id} resolved durations: {new_durations} (sum={sum(new_durations):.2f}s)", flush=True)
 
     output_path = os.path.join(job_dir, "final_video.mp4")
     try:

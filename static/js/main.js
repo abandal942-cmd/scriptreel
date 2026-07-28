@@ -317,9 +317,12 @@ function renderTimeline() {
         seg.text = e.target.value;
       });
     }
-    clip.querySelector("input").addEventListener("change", (e) => {
+    const durationInput = clip.querySelector("input");
+    durationInput.addEventListener("input", (e) => {
       const val = parseFloat(e.target.value);
       seg.duration = isNaN(val) || val < 0.5 ? 0.5 : val;
+    });
+    durationInput.addEventListener("change", () => {
       renderTimeline();
     });
     clip.querySelector(".seg-remove").addEventListener("click", () => {
@@ -426,6 +429,22 @@ document.getElementById("regenerateBtn").addEventListener("click", async () => {
     alert("Add at least one image to the timeline.");
     return;
   }
+
+  // Safety sync: read every duration/text field straight from the DOM right
+  // now, in case a "change"/"input" event was somehow missed.
+  const clipEls = document.querySelectorAll("#timelineTrack .timeline-clip");
+  clipEls.forEach((clipEl, i) => {
+    const seg = timelineState.segments[i];
+    if (!seg) return;
+    const durInput = clipEl.querySelector(".clip-overlay input[type='number']");
+    if (durInput) {
+      const val = parseFloat(durInput.value);
+      seg.duration = isNaN(val) || val < 0.5 ? 0.5 : val;
+    }
+    const textEl = clipEl.querySelector(".clip-text-edit");
+    if (textEl) seg.text = textEl.value;
+  });
+
   const payload = {
     segments: timelineState.segments.map((s) => ({
       kind: s.kind,
@@ -435,6 +454,7 @@ document.getElementById("regenerateBtn").addEventListener("click", async () => {
       text: s.text != null ? s.text : undefined,
     })),
   };
+  console.log("Regenerate payload being sent:", JSON.stringify(payload, null, 2));
   document.getElementById("loadingText").textContent = "Regenerating your video…";
   toggleLoading(true);
   try {
