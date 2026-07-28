@@ -513,11 +513,11 @@ def build_video(image_paths, narration_path, music_path, animate, output_path,
 
         base_video = os.path.join(tmp, "base.mp4")
         transition_times = _concat_with_crossfade(segments, durations, base_video, transition)
-
+        total_video_duration = sum(base_durations)
         video_with_badges = base_video
         if speaker_timeline:
             badged_video = os.path.join(tmp, "badged.mp4")
-            apply_speaker_badges(base_video, speaker_timeline, narration_duration, badged_video, tmp)
+            apply_speaker_badges(base_video, speaker_timeline, total_video_duration, badged_video, tmp)
             video_with_badges = badged_video
 
         video_with_emoji = video_with_badges
