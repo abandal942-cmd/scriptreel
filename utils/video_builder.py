@@ -534,6 +534,7 @@ def build_video(image_paths, narration_path, music_path, animate, output_path,
             video_with_text = captioned_video
 
         total_video_duration = sum(base_durations)
+        print(f"[build_video] custom_durations={custom_durations}, total_video_duration={total_video_duration:.2f}s", flush=True)
 
         mixed_audio = os.path.join(tmp, "mixed.aac")
         _mix_audio(narration_path, music_path, total_video_duration, mixed_audio)
