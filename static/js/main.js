@@ -208,6 +208,7 @@ const timelineState = {
   jobId: null,
   segments: [], // { kind: 'job'|'asset', ref: index|id, duration, thumbUrl }
   replaceTargetIndex: null,
+  availableVoices: [],
 };
 
 async function initTimelineEditor(jobId) {
@@ -216,12 +217,15 @@ async function initTimelineEditor(jobId) {
   const data = await res.json();
   if (data.error) return;
 
+  timelineState.availableVoices = data.available_voices || [];
   timelineState.segments = data.segments.map((s) => ({
     kind: "job",
     ref: s.index,
     duration: s.duration,
     thumbUrl: s.thumb_url,
     text: s.text, // null unless this slide is a text-card with editable wording
+    spokenText: s.spoken_text, // null unless per-slide voice control is available
+    voice: s.voice,
   }));
 
   document.getElementById("timelineEditorCard").classList.remove("hidden");
@@ -291,9 +295,13 @@ function renderTimeline() {
 
   timelineState.segments.forEach((seg, i) => {
     const clip = document.createElement("div");
+    const voicePanelOpen = seg.voicePanelOpen && seg.spokenText != null;
     clip.className = "timeline-clip" + (timelineState.replaceTargetIndex === i ? " armed-for-replace" : "");
     const baseWidth = Math.max(seg.duration * PX_PER_SEC, 50);
-    clip.style.width = `${seg.text != null ? Math.max(baseWidth, 170) : baseWidth}px`;
+    let width = baseWidth;
+    if (seg.text != null) width = Math.max(width, 170);
+    if (voicePanelOpen) width = Math.max(width, 220);
+    clip.style.width = `${width}px`;
     clip.style.backgroundImage = `url(${seg.thumbUrl})`;
     clip.innerHTML = `
       <button class="seg-remove" title="Remove">✕</button>
@@ -301,8 +309,19 @@ function renderTimeline() {
         <button class="clip-move-btn" data-dir="-1" title="Move left">‹</button>
         <button class="clip-move-btn" data-dir="1" title="Move right">›</button>
         <button class="clip-replace-btn" title="Replace this slide's image">⇄</button>
+        ${seg.spokenText != null ? `<button class="clip-voice-btn" title="Edit what's spoken for this slide">🎤</button>` : ""}
       </div>
-      ${seg.text != null ? `<textarea class="clip-text-edit" placeholder="On-screen text for this slide…">${seg.text}</textarea>` : ""}
+      ${seg.text != null && !voicePanelOpen ? `<textarea class="clip-text-edit" placeholder="On-screen text for this slide…">${seg.text}</textarea>` : ""}
+      ${voicePanelOpen ? `
+        <div class="clip-voice-panel">
+          <label>Spoken text</label>
+          <textarea class="clip-voice-text">${seg.spokenText || ""}</textarea>
+          <label>Voice</label>
+          <select class="clip-voice-select">
+            ${timelineState.availableVoices.map((v) => `<option value="${v.id}" ${v.id === seg.voice ? "selected" : ""}>${v.label}</option>`).join("")}
+          </select>
+        </div>
+      ` : ""}
       <div class="clip-overlay">
         <input type="number" min="0.5" step="0.5" value="${seg.duration.toFixed(1)}">
         <span>sec</span>
@@ -312,7 +331,22 @@ function renderTimeline() {
       timelineState.replaceTargetIndex = timelineState.replaceTargetIndex === i ? null : i;
       renderTimeline();
     });
-    if (seg.text != null) {
+    const voiceBtn = clip.querySelector(".clip-voice-btn");
+    if (voiceBtn) {
+      voiceBtn.addEventListener("click", () => {
+        seg.voicePanelOpen = !seg.voicePanelOpen;
+        renderTimeline();
+      });
+    }
+    if (voicePanelOpen) {
+      clip.querySelector(".clip-voice-text").addEventListener("change", (e) => {
+        seg.spokenText = e.target.value;
+      });
+      clip.querySelector(".clip-voice-select").addEventListener("change", (e) => {
+        seg.voice = e.target.value;
+      });
+    }
+    if (seg.text != null && !voicePanelOpen) {
       clip.querySelector(".clip-text-edit").addEventListener("change", (e) => {
         seg.text = e.target.value;
       });
@@ -443,6 +477,10 @@ document.getElementById("regenerateBtn").addEventListener("click", async () => {
     }
     const textEl = clipEl.querySelector(".clip-text-edit");
     if (textEl) seg.text = textEl.value;
+    const voiceTextEl = clipEl.querySelector(".clip-voice-text");
+    if (voiceTextEl) seg.spokenText = voiceTextEl.value;
+    const voiceSelectEl = clipEl.querySelector(".clip-voice-select");
+    if (voiceSelectEl) seg.voice = voiceSelectEl.value;
   });
 
   const payload = {
@@ -452,6 +490,8 @@ document.getElementById("regenerateBtn").addEventListener("click", async () => {
       id: s.kind === "asset" ? s.ref : undefined,
       duration: s.duration,
       text: s.text != null ? s.text : undefined,
+      spoken_text: s.spokenText != null ? s.spokenText : undefined,
+      voice: s.voice != null ? s.voice : undefined,
     })),
   };
   console.log("Regenerate payload being sent:", JSON.stringify(payload, null, 2));
@@ -468,6 +508,11 @@ document.getElementById("regenerateBtn").addEventListener("click", async () => {
       alert("Error: " + data.error);
       return;
     }
+    console.log("Regenerate response:", data);
+    alert(
+      `Regenerate finished.\n\nSubmitted durations sum: ${data.submitted_durations_sum}s\n` +
+      `Actual produced video duration: ${data.actual_video_duration_seconds}s`
+    );
     const video = document.getElementById("timelineResultVideo");
     document.getElementById("timelineResultBox").classList.remove("hidden");
     video.pause();

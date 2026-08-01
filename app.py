@@ -376,6 +376,18 @@ def generate():
         if panel_sentences:
             panel_texts = panel_sentences
 
+    # --- Per-slide spoken text/voice tracking (for the Timeline Editor's
+    # per-slide audio control). Only meaningful for single-voice mode —
+    # in 2-voice dialogue, images don't map cleanly to one speaker's line.
+    slide_texts = None
+    slide_voices = None
+    if voice_count != "2":
+        scenes = split_into_scenes(caption_text)
+        if scenes:
+            default_voice_id = voice_value or DEFAULT_VOICES[0]["id"]
+            slide_texts = [scenes[i % len(scenes)] for i in range(len(image_paths))]
+            slide_voices = [default_voice_id] * len(image_paths)
+
     # --- Resolve background music ---
     music_path = None
     if music_choice and music_choice != "none":
@@ -418,6 +430,8 @@ def generate():
         "speed_factor": speed_factor,
         "durations": [default_seg_duration] * len(image_paths),
         "text_sources": text_sources,
+        "slide_texts": slide_texts,
+        "slide_voices": slide_voices,
     }
     with open(os.path.join(job_dir, "meta.json"), "w") as f:
         json.dump(meta, f)
@@ -441,16 +455,20 @@ def job_timeline(job_id):
     if meta is None:
         return jsonify({"error": "job not found"}), 404
     text_sources = meta.get("text_sources")
+    slide_texts = meta.get("slide_texts")
+    slide_voices = meta.get("slide_voices")
     segments = [
         {
             "index": i,
             "duration": meta["durations"][i],
             "thumb_url": f"/jobs/{job_id}/thumb/{i}",
             "text": text_sources[i] if text_sources and i < len(text_sources) else None,
+            "spoken_text": slide_texts[i] if slide_texts and i < len(slide_texts) else None,
+            "voice": slide_voices[i] if slide_voices and i < len(slide_voices) else None,
         }
         for i in range(len(meta["image_paths"]))
     ]
-    return jsonify({"segments": segments})
+    return jsonify({"segments": segments, "available_voices": DEFAULT_VOICES})
 
 
 @app.route("/jobs/<job_id>/thumb/<int:index>")
@@ -469,7 +487,8 @@ def job_regenerate(job_id):
     Rebuild the video from an edited timeline: a reordered/resized list of
     segments, each referencing either an existing job image, a saved
     library asset, or a stock default image, plus new per-segment
-    durations and/or newly appended images from the "add media" panel.
+    durations, on-screen text edits, and/or per-slide spoken text/voice
+    (which triggers a full narration rebuild — see below).
     """
     meta, job_dir = _load_job_meta(job_id)
     if meta is None:
@@ -485,13 +504,22 @@ def job_regenerate(job_id):
     new_image_paths = []
     new_durations = []
     new_text_sources = []
+    new_slide_texts = []
+    new_slide_voices = []
     old_text_sources = meta.get("text_sources")
+    old_slide_texts = meta.get("slide_texts")
+    old_slide_voices = meta.get("slide_voices")
+
     for seg in segments:
         kind = seg.get("kind")
         duration = float(seg.get("duration", 3.0))
         duration = max(duration, 0.5)
         edited_text = seg.get("text")
+        submitted_spoken = seg.get("spoken_text")
+        submitted_voice = seg.get("voice")
         text_for_slide = None
+        original_spoken = None
+        original_voice = None
         try:
             if kind == "job":
                 idx = int(seg["index"])
@@ -505,6 +533,8 @@ def job_regenerate(job_id):
                     text_for_slide = edited_text.strip()
                 else:
                     text_for_slide = original_text
+                original_spoken = old_slide_texts[idx] if old_slide_texts and idx < len(old_slide_texts) else None
+                original_voice = old_slide_voices[idx] if old_slide_voices and idx < len(old_slide_voices) else None
             elif kind == "asset":
                 path = resolve_asset_path(user_id, "image", "library", seg["id"], None)
             elif kind == "default":
@@ -517,21 +547,76 @@ def job_regenerate(job_id):
             new_image_paths.append(path)
             new_durations.append(duration)
             new_text_sources.append(text_for_slide)
+            resolved_spoken = submitted_spoken.strip() if submitted_spoken and submitted_spoken.strip() else original_spoken
+            resolved_voice = submitted_voice or original_voice or DEFAULT_VOICES[0]["id"]
+            new_slide_texts.append(resolved_spoken)
+            new_slide_voices.append(resolved_voice)
 
     if not new_image_paths:
         return jsonify({"error": "no valid images found in the submitted timeline"}), 400
     print(f"[regenerate] job={job_id} resolved durations: {new_durations} (sum={sum(new_durations):.2f}s)", flush=True)
 
+    # --- Per-slide audio rebuild ---
+    # If this job has any slide-level spoken text at all, re-synthesize the
+    # WHOLE narration fresh (one TTS call per slide, concatenated) so every
+    # slide's voice/wording edit is reflected — not just a slice of the old
+    # single track. Jobs without slide-level text (e.g. dialogue mode) keep
+    # using their existing narration untouched.
+    narration_path = meta["narration_path"]
+    word_boundaries = meta["word_boundaries"]
+    caption_text = meta["caption_text"]
+
+    if any(t for t in new_slide_texts):
+        try:
+            seg_audio_paths = []
+            seg_word_boundaries_list = []
+            for i, (text, voice_id) in enumerate(zip(new_slide_texts, new_slide_voices)):
+                seg_audio_path = os.path.join(job_dir, f"slide_audio_{i}_{uuid.uuid4().hex[:6]}.mp3")
+                if text:
+                    wb = generate_tts(text, voice_id, seg_audio_path)
+                else:
+                    # No spoken text for this slide — fill with silence sized to its visual duration.
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-f", "lavfi", "-i", f"anullsrc=r=24000:cl=mono",
+                         "-t", str(new_durations[i]), "-q:a", "9", seg_audio_path],
+                        check=True, capture_output=True,
+                    )
+                    wb = []
+                seg_audio_paths.append(seg_audio_path)
+                seg_word_boundaries_list.append(wb)
+
+            new_narration_path = os.path.join(job_dir, "narration.mp3")
+            concat_audio_segments(seg_audio_paths, new_narration_path)
+
+            # Merge each slide's own word timestamps, offset by cumulative audio duration so far
+            merged_word_boundaries = []
+            cursor = 0.0
+            for seg_path, wb in zip(seg_audio_paths, seg_word_boundaries_list):
+                for w in wb:
+                    merged_word_boundaries.append({
+                        "text": w["text"],
+                        "start": w["start"] + cursor,
+                        "duration": w["duration"],
+                    })
+                cursor += get_audio_duration(seg_path)
+
+            narration_path = new_narration_path
+            word_boundaries = merged_word_boundaries if merged_word_boundaries else None
+            caption_text = " ".join(t for t in new_slide_texts if t)
+            print(f"[regenerate] job={job_id} rebuilt per-slide narration, total audio={cursor:.2f}s", flush=True)
+        except Exception as e:
+            return jsonify({"error": f"Per-slide voice generation failed: {e}"}), 500
+
     output_path = os.path.join(job_dir, "final_video.mp4")
     try:
         build_video(
             image_paths=new_image_paths,
-            narration_path=meta["narration_path"],
+            narration_path=narration_path,
             music_path=meta["music_path"],
             animate=meta["animate"],
             output_path=output_path,
-            caption_text=meta["caption_text"],
-            word_boundaries=meta["word_boundaries"],
+            caption_text=caption_text,
+            word_boundaries=word_boundaries,
             emoji_list=None,
             speaker_timeline=meta["speaker_timeline"],
             panel_texts=meta["panel_texts"],
@@ -547,10 +632,21 @@ def job_regenerate(job_id):
     meta["image_paths"] = new_image_paths
     meta["durations"] = new_durations
     meta["text_sources"] = new_text_sources if any(t is not None for t in new_text_sources) else None
+    meta["slide_texts"] = new_slide_texts if any(t for t in new_slide_texts) else None
+    meta["slide_voices"] = new_slide_voices if any(t for t in new_slide_texts) else None
+    meta["narration_path"] = narration_path
+    meta["word_boundaries"] = word_boundaries
+    meta["caption_text"] = caption_text
     with open(os.path.join(job_dir, "meta.json"), "w") as f:
         json.dump(meta, f)
 
-    return jsonify({"video_url": f"/download/{job_id}/final_video.mp4?v={uuid.uuid4().hex[:8]}"})
+    actual_duration = get_audio_duration(output_path)
+    return jsonify({
+        "video_url": f"/download/{job_id}/final_video.mp4?v={uuid.uuid4().hex[:8]}",
+        "actual_video_duration_seconds": round(actual_duration, 2),
+        "submitted_durations": new_durations,
+        "submitted_durations_sum": round(sum(new_durations), 2),
+    })
 
 
 @app.route("/download/<job_id>/<filename>")
