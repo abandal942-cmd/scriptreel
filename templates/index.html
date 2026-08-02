@@ -209,6 +209,26 @@
   <p id="loadingText">Rendering your video…</p>
 </div>
 
+<div id="slidePopupOverlay" class="slide-popup-overlay hidden">
+  <div class="slide-popup">
+    <div class="slide-popup-header">
+      <span>Edit slide</span>
+      <button id="slidePopupClose" class="slide-popup-close" title="Cancel">✕</button>
+    </div>
+    <img id="slidePopupPreview" class="slide-popup-preview" alt="Slide preview">
+    <div class="slide-popup-body">
+      <div class="step-label" style="font-size:11px;">Upload a new image for this slide</div>
+      <input type="file" id="slidePopupUploadInput" accept="image/*">
+      <div class="step-label" style="font-size:11px; margin-top:14px;">Or pick from your uploads</div>
+      <div id="slidePopupMediaGrid" class="media-grid"></div>
+    </div>
+    <div class="slide-popup-footer">
+      <button id="slidePopupCancel" class="mode-btn">Cancel</button>
+      <button id="slidePopupSave" class="generate-btn" style="width:auto; padding:10px 24px;">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
   window.DEFAULT_IMAGE_FILES = {{ default_images | tojson }};
 </script>
