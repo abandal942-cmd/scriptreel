@@ -264,6 +264,77 @@ function replaceSegment(index, newMedia) {
   renderTimeline();
 }
 
+// --- Slide edit popup: click a slide to open, pick/upload an image, Save to apply ---
+const slidePopupState = { index: null, pendingMedia: null };
+
+function openSlidePopup(index) {
+  const seg = timelineState.segments[index];
+  if (!seg) return;
+  slidePopupState.index = index;
+  slidePopupState.pendingMedia = null;
+  document.getElementById("slidePopupPreview").src = seg.thumbUrl;
+  document.getElementById("slidePopupUploadInput").value = "";
+  document.getElementById("slidePopupOverlay").classList.remove("hidden");
+  loadSlidePopupMediaGrid();
+}
+
+function closeSlidePopup() {
+  document.getElementById("slidePopupOverlay").classList.add("hidden");
+  slidePopupState.index = null;
+  slidePopupState.pendingMedia = null;
+}
+
+async function loadSlidePopupMediaGrid() {
+  const grid = document.getElementById("slidePopupMediaGrid");
+  grid.innerHTML = "";
+  const res = await fetch("/assets/image");
+  const items = await res.json();
+  items.forEach((item) => {
+    const thumbUrl = `/assets/thumb/${item.id}`;
+    const wrap = document.createElement("div");
+    wrap.className = "media-item";
+    wrap.innerHTML = `<img src="${thumbUrl}" alt="${item.label}">`;
+    wrap.addEventListener("click", () => {
+      slidePopupState.pendingMedia = { kind: "asset", id: item.id, thumbUrl };
+      document.getElementById("slidePopupPreview").src = thumbUrl;
+      grid.querySelectorAll(".media-item").forEach((el) => el.classList.remove("selected-in-popup"));
+      wrap.classList.add("selected-in-popup");
+    });
+    grid.appendChild(wrap);
+  });
+}
+
+document.getElementById("slidePopupUploadInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append("type", "image");
+  fd.append("file", file);
+  fd.append("label", file.name);
+  const res = await fetch("/assets/upload", { method: "POST", body: fd });
+  const data = await res.json();
+  if (data.error) {
+    alert("Upload failed: " + data.error);
+    return;
+  }
+  const thumbUrl = `/assets/thumb/${data.id}`;
+  slidePopupState.pendingMedia = { kind: "asset", id: data.id, thumbUrl };
+  document.getElementById("slidePopupPreview").src = thumbUrl;
+  loadSlidePopupMediaGrid();
+});
+
+document.getElementById("slidePopupClose").addEventListener("click", closeSlidePopup);
+document.getElementById("slidePopupCancel").addEventListener("click", closeSlidePopup);
+document.getElementById("slidePopupOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "slidePopupOverlay") closeSlidePopup();
+});
+document.getElementById("slidePopupSave").addEventListener("click", () => {
+  if (slidePopupState.pendingMedia && slidePopupState.index !== null) {
+    replaceSegment(slidePopupState.index, slidePopupState.pendingMedia);
+  }
+  closeSlidePopup();
+});
+
 function renderTimeline() {
   const track = document.getElementById("timelineTrack");
   const ruler = document.getElementById("timelineRuler");
@@ -327,9 +398,12 @@ function renderTimeline() {
         <span>sec</span>
       </div>
     `;
-    clip.querySelector(".clip-replace-btn").addEventListener("click", () => {
-      timelineState.replaceTargetIndex = timelineState.replaceTargetIndex === i ? null : i;
-      renderTimeline();
+    clip.querySelector(".clip-replace-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openSlidePopup(i);
+    });
+    clip.addEventListener("click", (e) => {
+      if (e.target === clip) openSlidePopup(i);
     });
     const voiceBtn = clip.querySelector(".clip-voice-btn");
     if (voiceBtn) {
